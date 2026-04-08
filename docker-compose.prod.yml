@@ -1,0 +1,25 @@
+services:
+  # Nambahin API di Prod
+  api:
+    build: ./api
+    container_name: lapisbaja_api
+    restart: always
+    environment:
+      - DB_URL=postgres://devuser:devpassword@db:5432/lapisbaja_db?sslmode=disable
+      - REDIS_ADDR=cache:6379
+    depends_on:
+      - db
+      - cache
+
+  # Nambahin Web di Prod
+  web:
+    build:
+      context: ./web
+      args:
+        - NEXT_PUBLIC_API_URL=https://api.lapisbaja.com # URL asli prod kamu
+    container_name: lapisbaja_web
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
