@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -12,10 +13,39 @@ import (
 	"github.com/helwiza/lapisbaja-api/internal/service"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 )
 
+// ensureAdminUser memastikan user admin ada dengan hash bcrypt yang valid dari Go
+func ensureAdminUser(db *sqlx.DB) {
+	var exists bool
+	err := db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)", "admin")
+	if err != nil {
+		log.Printf("⚠️ Gagal cek admin user: %v", err)
+		return
+	}
+
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+
+	if !exists {
+		// Jika belum ada, insert baru
+		query := `INSERT INTO users (username, password, full_name) VALUES ($1, $2, $3)`
+		_, err = db.Exec(query, "admin", string(hashedPassword), "Admin Lapis Baja")
+		if err == nil {
+			fmt.Println("🚀 SEED: Default admin user created (admin/admin123)")
+		}
+	} else {
+		// Jika sudah ada, paksa update password (untuk fix hash siluman di Windows)
+		query := `UPDATE users SET password=$1 WHERE username=$2`
+		_, err = db.Exec(query, string(hashedPassword), "admin")
+		if err == nil {
+			fmt.Println("🚀 RE-HASH: Admin password updated by Go Native!")
+		}
+	}
+}
+
 func main() {
-	// 1. Load Configuration (PORT, DB_URL, R2, REDIS, JWT_SECRET)
+	// 1. Load Configuration
 	cfg := config.LoadConfig()
 
 	// 2. Database Connection (Postgres)
@@ -23,47 +53,46 @@ func main() {
 	if err != nil {
 		log.Fatalf("Gagal koneksi database: %v", err)
 	}
-	
-	// Jalankan migrasi otomatis (UUID Schema, Tables, & Seed Admin)
+
+	// Jalankan migrasi otomatis
 	database.RunMigrations(cfg.DBURL)
-	
+
+	// --- EMERGENCY SEED UNTUK WINDOWS ---
+	ensureAdminUser(db)
+	// ------------------------------------
+
 	// 3. Initialize Infrastructure Services
-	// S3/R2 Service untuk upload bukti bayar
 	s3Svc, err := infra.NewS3Service(cfg.R2)
 	if err != nil {
 		log.Fatalf("Gagal init S3: %v", err)
 	}
-	
-	// Redis Service untuk caching dan notifikasi
+
 	redisSvc := infra.NewRedisService(cfg.RedisAddr, cfg.RedisPass)
-	
+
 	// 4. Initialize Repositories
 	regRepo := repository.NewRegistrationRepository(db, redisSvc)
 	trainRepo := repository.NewTrainingRepository(db, redisSvc)
-	authRepo := repository.NewAuthRepository(db) // Repository baru untuk Auth
-	
+	authRepo := repository.NewAuthRepository(db)
+
 	// 5. Initialize Business Services
 	regSvc := service.NewRegistrationService(regRepo, s3Svc, redisSvc)
 	trainSvc := service.NewTrainingService(trainRepo)
-	// Service baru untuk Auth dengan JWT Secret dari Config
 	authSvc := service.NewAuthService(authRepo, cfg.JWTSecret)
 
 	// 6. Initialize HTTP Handlers
 	regHandler := delivery.NewRegistrationHandler(regSvc)
 	trainHandler := delivery.NewTrainingHandler(trainSvc)
-	authHandler := delivery.NewAuthHandler(authSvc) // Handler baru untuk Login
+	authHandler := delivery.NewAuthHandler(authSvc)
 
 	// 7. Routing Setup
 	mux := http.NewServeMux()
-	// Inject semua handler dan JWT Secret ke routes
 	delivery.MapRoutes(mux, regHandler, trainHandler, authHandler, cfg.JWTSecret)
 
 	// 8. Global Middleware Wrap
-	// Mengaktifkan CORS agar Next.js bisa berkomunikasi dengan Backend
 	handlerStack := delivery.LoadMiddlewares(mux)
 
 	log.Printf("✅ Server PT Lapis Baja berjalan di port %s", cfg.AppPort)
-	
+
 	// 9. Start Server
 	server := &http.Server{
 		Addr:    ":" + cfg.AppPort,

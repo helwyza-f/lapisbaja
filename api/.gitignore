@@ -1,0 +1,32 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Main binary
+main
+api-server
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, consumed by `go tool cover -html`
+*.out
+
+# Dependency directories (only empty if using vendoring)
+vendor/
+
+# Environment variables (SANGAT PENTING)
+.env
+.env.local
+
+# Docker logs & storage
+docker-data/
+*.log
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
