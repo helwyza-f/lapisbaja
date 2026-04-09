@@ -18,7 +18,7 @@ func NewTrainingHandler(svc *service.TrainingService) *TrainingHandler {
 	return &TrainingHandler{svc: svc}
 }
 
-// Create membuat data training baru
+// Create: Menangani pembuatan program pelatihan baru
 func (h *TrainingHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateTrainingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -28,94 +28,107 @@ func (h *TrainingHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.CreateTraining(r.Context(), req)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal membuat training", err.Error())
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create industrial program", err.Error())
 		return
 	}
 
-	utils.SuccessResponse(w, http.StatusCreated, "Training berhasil dibuat", result)
+	utils.SuccessResponse(w, http.StatusCreated, "SYSTEM: Training program deployed successfully", result)
 }
 
-// List mengambil semua data training (Cache-enabled via Repo)
+// List: Mengambil daftar pelatihan dengan dukungan SEARCH & SMART PAGINATION
 func (h *TrainingHandler) List(w http.ResponseWriter, r *http.Request) {
-    // 1. Ambil & Validasi Query Param
-    query := r.URL.Query()
-    
-    limit, _ := strconv.Atoi(query.Get("limit"))
-    page, _ := strconv.Atoi(query.Get("page"))
+	// 1. Extract Query Parameters
+	query := r.URL.Query()
+	
+	search := query.Get("search") // Ambil keyword pencarian
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	page, _ := strconv.Atoi(query.Get("page"))
 
-    // Logic default pagination
-    if limit <= 0 { limit = 9 } // Rekomendasi 9 (grid 3x3)
-    if page <= 0 { page = 1 }
-    
-    // Hitung offset: (page - 1) * limit
-    // Contoh: Page 1 -> (1-1)*9 = 0. Page 2 -> (2-1)*9 = 9.
-    offset := (page - 1) * limit
+	// Default values (Optimize for 3x3 grid or 10-row table)
+	if limit <= 0 { limit = 10 } 
+	if page <= 0 { page = 1 }
 
-    // 2. Panggil service
-    trainings, err := h.svc.ListTrainings(r.Context(), limit, offset)
-    if err != nil {
-        utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal mengambil data", err.Error())
-        return
-    }
+	// 2. Execute Service Logic
+	trainings, totalData, err := h.svc.ListTrainings(r.Context(), search, limit, page)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to synchronize registry", err.Error())
+		return
+	}
 
-    // 3. Response
-    // Tips: Kedepannya kamu bisa sertai metadata "total_data" untuk membantu frontend bikin UI numbering
-    utils.SuccessResponse(w, http.StatusOK, "Berhasil mengambil daftar training", trainings)
+	// 3. Calculate Metadata
+	totalPage := 0
+	if totalData > 0 {
+		totalPage = (totalData + limit - 1) / limit
+	}
+
+	// 4. Construct Structured Response
+	// Dibungkus ke model.TrainingPaginationResponse agar Frontend Admin dapet Meta
+	response := model.TrainingPaginationResponse{
+		Items: trainings,
+		Meta: model.Meta{
+			TotalData:   totalData,
+			TotalPage:   totalPage,
+			CurrentPage: page,
+			Limit:       limit,
+		},
+	}
+
+	utils.SuccessResponse(w, http.StatusOK, "SYSTEM: Registry synchronized successfully", response)
 }
 
-// GetByID mengambil detail satu training berdasarkan UUID di URL
+// GetByID: Mengambil detail satu program secara mendalam
 func (h *TrainingHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id") // Fitur native Go 1.22+
+	id := r.PathValue("id") // Native Go 1.22+ Path Parameter
 	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "ID training wajib disertakan", nil)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Program ID is mandatory", nil)
 		return
 	}
 
 	result, err := h.svc.GetTrainingByID(r.Context(), id)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Training tidak ditemukan", err.Error())
+		utils.ErrorResponse(w, http.StatusNotFound, "Program not found in current sector", err.Error())
 		return
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Berhasil mengambil detail training", result)
+	utils.SuccessResponse(w, http.StatusOK, "SYSTEM: Detail retrieved successfully", result)
 }
 
-// Update mengubah data training yang sudah ada
+// Update: Menyinkronkan perubahan data pada program yang sudah ada
 func (h *TrainingHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "ID training wajib disertakan", nil)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Program ID is mandatory", nil)
 		return
 	}
 
 	var req model.CreateTrainingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err.Error())
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid data payload", err.Error())
 		return
 	}
 
 	result, err := h.svc.UpdateTraining(r.Context(), id, req)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal memperbarui training", err.Error())
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Update sequence failed", err.Error())
 		return
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Training berhasil diperbarui", result)
+	utils.SuccessResponse(w, http.StatusOK, "SYSTEM: Program updated and cache flushed", result)
 }
 
-// Delete menghapus data training
+// Delete: Menghapus program dari sistem (Permanent Action)
 func (h *TrainingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "ID training wajib disertakan", nil)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Program ID is mandatory", nil)
 		return
 	}
 
 	err := h.svc.DeleteTraining(r.Context(), id)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal menghapus training", err.Error())
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Termination sequence failed", err.Error())
 		return
 	}
 
-	utils.SuccessResponse(w, http.StatusOK, "Training berhasil dihapus", nil)
+	utils.SuccessResponse(w, http.StatusOK, "SYSTEM: Program purged from registry", nil)
 }

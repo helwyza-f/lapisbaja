@@ -17,9 +17,9 @@ func NewTrainingService(repo *repository.TrainingRepository) *TrainingService {
 	return &TrainingService{repo: repo}
 }
 
-// Helper untuk handle berbagai format tanggal dari Frontend (Flawless Logic)
+// Helper untuk handle berbagai format tanggal dari Frontend (Next.js & Browser)
 func parseDate(dateStr string) (time.Time, error) {
-	// 1. Coba format ISO (RFC3339) - Ini yang dikirim Next.js secara default
+	// 1. Coba format ISO (RFC3339) dari .toISOString()
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err == nil {
 		return t, nil
@@ -31,7 +31,7 @@ func parseDate(dateStr string) (time.Time, error) {
 		return t, nil
 	}
 
-	return time.Time{}, fmt.Errorf("format tanggal tidak dikenali: %s", dateStr)
+	return time.Time{}, fmt.Errorf("invalid industrial date format: %s", dateStr)
 }
 
 func (s *TrainingService) CreateTraining(ctx context.Context, req model.CreateTrainingRequest) (*model.Training, error) {
@@ -51,14 +51,23 @@ func (s *TrainingService) CreateTraining(ctx context.Context, req model.CreateTr
 	return training, err
 }
 
-// internal/service/training_service.go
-func (s *TrainingService) ListTrainings(ctx context.Context, limit, offset int) ([]model.Training, error) {
-    // Kamu bisa tambahkan logic default value di sini jika perlu
-    if limit <= 0 {
-        limit = 10 // Default 10 data per page
-    }
-    return s.repo.GetAll(ctx, limit, offset)
+// ListTrainings: FIX ERROR DISINI
+// Ditambahkan return 'int' untuk total data dan parameter 'search'
+func (s *TrainingService) ListTrainings(ctx context.Context, search string, limit, page int) ([]model.Training, int, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Kalkulasi offset untuk query PostgreSQL
+	offset := (page - 1) * limit
+
+	// Panggil repo dengan parameter lengkap: context, search, limit, offset
+	return s.repo.GetAll(ctx, search, limit, offset)
 }
+
 func (s *TrainingService) GetTrainingByID(ctx context.Context, id string) (*model.Training, error) {
 	return s.repo.GetByID(ctx, id)
 }

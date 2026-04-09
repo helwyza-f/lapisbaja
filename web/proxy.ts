@@ -1,21 +1,21 @@
-// web/proxy.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
+  const token = request.cookies.get("lapisbaja_token")?.value;
   const { pathname } = request.nextUrl;
 
-  // 1. Dashboard Protection: Cegah akses tanpa token
+  // 1. Dashboard Protection
   if (pathname.startsWith("/dashboard") && !token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // 2. Auth Page Guard: Jika sudah login, jangan biarkan akses ke /login
+  // 2. Auth Page Guard
   if (pathname === "/login" && token) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // 3. Admin Landing: Jika akses ke root area admin (/admin), arahkan ke dashboard
+  // 3. Admin Landing Shortcut
   if (pathname === "/admin") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
@@ -24,10 +24,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    // Jalankan proxy hanya pada route admin dan dashboard
-    "/dashboard/:path*",
-    "/login",
-    "/admin/:path*",
-  ],
+  matcher: ["/dashboard/:path*", "/login", "/admin", "/admin/:path*"],
 };

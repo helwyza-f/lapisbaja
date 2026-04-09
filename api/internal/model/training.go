@@ -17,3 +17,16 @@ type CreateTrainingRequest struct {
 	DateStart   string  `json:"date_start" validate:"required"` // Format: YYYY-MM-DD
 	Price       float64 `json:"price" validate:"required"`
 }
+
+// Tambahkan ini Boy, untuk response yang rapi
+type TrainingPaginationResponse struct {
+	Items []Training `json:"items"`
+	Meta  Meta       `json:"meta"`
+}
+
+type Meta struct {
+	TotalData   int `json:"total_data"`
+	TotalPage   int `json:"total_page"`
+	CurrentPage int `json:"current_page"`
+	Limit       int `json:"limit"`
+}

@@ -21,54 +21,78 @@ func NewTrainingRepository(db *sqlx.DB, redis *infra.RedisService) *TrainingRepo
 	return &TrainingRepository{db: db, redis: redis}
 }
 
+// flushCache menghapus SEMUA cache terkait trainings (pagination & search)
 func (r *TrainingRepository) flushCache(ctx context.Context) {
-	_ = r.redis.Delete(ctx, "trainings_all")
+	// Gunakan prefix agar key trainings_s_l10_o0 dkk ikut terhapus
+	_ = r.redis.DeleteByPrefix(ctx, "trainings_")
 }
 
 func (r *TrainingRepository) Create(ctx context.Context, t *model.Training) error {
 	query := `
-        INSERT INTO trainings (title, description, date_start, price)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at`
+		INSERT INTO trainings (title, description, date_start, price)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at`
 	
 	err := r.db.QueryRowxContext(ctx, query, t.Title, t.Description, t.DateStart, t.Price).
 		Scan(&t.ID, &t.CreatedAt)
 	
 	if err == nil {
-		r.flushCache(ctx)
+		r.flushCache(ctx) // Reset cache setelah insert
 	}
 	return err
 }
 
-func (r *TrainingRepository) GetAll(ctx context.Context, limit, offset int) ([]model.Training, error) {
-    trainings := []model.Training{} 
-    
-    // Cache key harus unik mencakup limit DAN offset agar data tiap halaman tidak tertukar
-    cacheKey := fmt.Sprintf("trainings_l%d_o%d", limit, offset)
+func (r *TrainingRepository) GetAll(ctx context.Context, search string, limit, offset int) ([]model.Training, int, error) {
+	trainings := []model.Training{}
+	var total int
 
-    cachedData, err := r.redis.Get(ctx, cacheKey)
-    if err == nil && cachedData != "" {
-        if err := json.Unmarshal([]byte(cachedData), &trainings); err == nil {
-            return trainings, nil
-        }
-    }
+	// Key menyertakan 'search' agar hasil pencarian masuk cache yang benar
+	cacheKey := fmt.Sprintf("trainings_s%s_l%d_o%d", search, limit, offset)
 
-    // Gunakan query dengan LIMIT dan OFFSET
-    // Urutkan berdasarkan date_start ASC agar urutan jadwal konsisten di tiap page
-    query := `SELECT id, title, description, date_start, price, created_at 
-              FROM trainings 
-              ORDER BY date_start ASC 
-              LIMIT $1 OFFSET $2`
+	// 1. Cek Cache
+	cachedData, err := r.redis.Get(ctx, cacheKey)
+	if err == nil && cachedData != "" {
+		// Wrapper untuk unmarshal data dan total
+		type cacheWrapper struct {
+			Items []model.Training `json:"items"`
+			Total int              `json:"total"`
+		}
+		var wrapper cacheWrapper
+		if err := json.Unmarshal([]byte(cachedData), &wrapper); err == nil {
+			return wrapper.Items, wrapper.Total, nil
+		}
+	}
 
-    err = r.db.SelectContext(ctx, &trainings, query, limit, offset)
-    if err != nil {
-        return nil, err
-    }
+	// 2. Query Total Data untuk Smart Pagination
+	countQuery := `SELECT COUNT(*) FROM trainings WHERE title ILIKE $1`
+	err = r.db.GetContext(ctx, &total, countQuery, "%"+search+"%")
+	if err != nil {
+		return nil, 0, err
+	}
 
-    jsonData, _ := json.Marshal(trainings)
-    _ = r.redis.Set(ctx, cacheKey, jsonData, 1*time.Hour)
+	// 3. Query Data dengan Search & Pagination
+	// ILIKE untuk case-insensitive (Postgres)
+	query := `SELECT id, title, description, date_start, price, created_at 
+			  FROM trainings 
+			  WHERE title ILIKE $1 
+			  ORDER BY date_start ASC 
+			  LIMIT $2 OFFSET $3`
 
-    return trainings, nil
+	err = r.db.SelectContext(ctx, &trainings, query, "%"+search+"%", limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 4. Simpan ke Redis (Expire 1 Jam)
+	// Kita simpan Items dan Total dalam satu JSON
+	cachePayload := map[string]interface{}{
+		"items": trainings,
+		"total": total,
+	}
+	jsonData, _ := json.Marshal(cachePayload)
+	_ = r.redis.Set(ctx, cacheKey, string(jsonData), 1*time.Hour)
+
+	return trainings, total, nil
 }
 
 func (r *TrainingRepository) GetByID(ctx context.Context, id string) (*model.Training, error) {
@@ -86,13 +110,13 @@ func (r *TrainingRepository) GetByID(ctx context.Context, id string) (*model.Tra
 
 func (r *TrainingRepository) Update(ctx context.Context, t *model.Training) error {
 	query := `
-        UPDATE trainings 
-        SET title = $1, description = $2, date_start = $3, price = $4 
-        WHERE id = $5`
+		UPDATE trainings 
+		SET title = $1, description = $2, date_start = $3, price = $4 
+		WHERE id = $5`
 	
 	_, err := r.db.ExecContext(ctx, query, t.Title, t.Description, t.DateStart, t.Price, t.ID)
 	if err == nil {
-		r.flushCache(ctx)
+		r.flushCache(ctx) // Reset cache setelah update
 	}
 	return err
 }
@@ -100,7 +124,7 @@ func (r *TrainingRepository) Update(ctx context.Context, t *model.Training) erro
 func (r *TrainingRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM trainings WHERE id = $1", id)
 	if err == nil {
-		r.flushCache(ctx)
+		r.flushCache(ctx) // Reset cache setelah delete
 	}
 	return err
 }

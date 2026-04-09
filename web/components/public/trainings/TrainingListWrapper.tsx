@@ -10,13 +10,25 @@ export default async function TrainingListWrapper({
   limit: string;
 }) {
   let trainings = [];
+  let paginationMeta = null;
 
   try {
     const res = await api.get(`/trainings?page=${page}&limit=${limit}`);
-    trainings = res.data?.data || [];
+
+    // SYNC WITH NEW BACKEND: Ambil items dan meta
+    const { items, meta } = res.data?.data || {};
+
+    trainings = items || [];
+    paginationMeta = meta || null;
   } catch (error) {
-    console.error("Gagal ambil data pelatihan:", error);
+    console.error("INDUSTRIAL_ERROR: Failed to fetch catalog data:", error);
   }
 
-  return <TrainingList initialData={trainings} currentPage={parseInt(page)} />;
+  return (
+    <TrainingList
+      initialData={trainings}
+      meta={paginationMeta}
+      currentPage={parseInt(page)}
+    />
+  );
 }

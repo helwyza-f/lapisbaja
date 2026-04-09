@@ -66,7 +66,7 @@ export default function ClientExperience() {
             {/* Quick Stats */}
             <div className="grid grid-cols-2 gap-6 pt-4">
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 transition-transform active:scale-95">
-                <p className="text-3xl font-black text-slate-900">10+</p>
+                <p className="text-3xl font-black text-slate-900">20+</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
                   Years Experience
                 </p>
