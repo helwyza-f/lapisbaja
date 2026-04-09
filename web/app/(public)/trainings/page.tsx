@@ -1,27 +1,21 @@
 // app/trainings/page.tsx
-import { api } from "@/lib/api";
-import TrainingList from "@/components/public/trainings/TrainingList";
+import { Suspense } from "react";
 import TrainingHeroBackground from "@/components/public/trainings/TrainingHeroBackground";
+import TrainingListWrapper from "@/components/public/trainings/TrainingListWrapper";
+import ListSkeleton from "@/components/public/trainings/ListSkeleton";
 
-export default async function TrainingsPage({
-  searchParams,
-}: {
-  searchParams: { page?: string; limit?: string };
-}) {
+// Definisikan tipe untuk Next.js 15
+type tParams = Promise<{ page?: string; limit?: string }>;
+
+export default async function TrainingsPage(props: { searchParams: tParams }) {
+  // UNWRAP searchParams menggunakan await (Wajib di Next.js 15+)
+  const searchParams = await props.searchParams;
   const page = searchParams.page || "1";
-  const limit = searchParams.limit || "9"; // Grid 3x3 yang ideal
-  let trainings = [];
-
-  try {
-    // Tarik data berdasarkan page dan limit dari URL
-    const res = await api.get(`/trainings?page=${page}&limit=${limit}`);
-    trainings = res.data?.data || [];
-  } catch (error) {
-    console.error("Gagal ambil data pelatihan:", error);
-  }
+  const limit = searchParams.limit || "9";
 
   return (
     <main className="min-h-screen bg-slate-50">
+      {/* HEADER: Langsung Render */}
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-slate-950">
         <TrainingHeroBackground />
         <div className="container mx-auto px-6 relative z-30 text-center space-y-6">
@@ -40,14 +34,13 @@ export default async function TrainingsPage({
         </div>
       </section>
 
+      {/* LIST AREA: Loading Scoped */}
       <section className="py-12 md:py-20 bg-slate-50">
         <div className="container mx-auto px-6">
           <div className="bg-white rounded-[2.5rem] p-6 md:p-12 shadow-xl border border-slate-100">
-            {/* Lempar data dan info page saat ini */}
-            <TrainingList
-              initialData={trainings}
-              currentPage={parseInt(page)}
-            />
+            <Suspense key={page} fallback={<ListSkeleton />}>
+              <TrainingListWrapper page={page} limit={limit} />
+            </Suspense>
           </div>
         </div>
       </section>
