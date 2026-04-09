@@ -40,30 +40,35 @@ func (r *TrainingRepository) Create(ctx context.Context, t *model.Training) erro
 	return err
 }
 
-func (r *TrainingRepository) GetAll(ctx context.Context) ([]model.Training, error) {
-	// Inisialisasi empty slice supaya JSON balikan [] bukan null
-	trainings := []model.Training{} 
-	cacheKey := "trainings_all"
+func (r *TrainingRepository) GetAll(ctx context.Context, limit, offset int) ([]model.Training, error) {
+    trainings := []model.Training{} 
+    
+    // Cache key harus unik mencakup limit DAN offset agar data tiap halaman tidak tertukar
+    cacheKey := fmt.Sprintf("trainings_l%d_o%d", limit, offset)
 
-	cachedData, err := r.redis.Get(ctx, cacheKey)
-	if err == nil && cachedData != "" {
-		if err := json.Unmarshal([]byte(cachedData), &trainings); err == nil {
-			// Double check agar tidak null setelah unmarshal
-			if trainings == nil { trainings = []model.Training{} }
-			return trainings, nil
-		}
-	}
+    cachedData, err := r.redis.Get(ctx, cacheKey)
+    if err == nil && cachedData != "" {
+        if err := json.Unmarshal([]byte(cachedData), &trainings); err == nil {
+            return trainings, nil
+        }
+    }
 
-	query := `SELECT id, title, description, date_start, price, created_at FROM trainings ORDER BY date_start ASC`
-	err = r.db.SelectContext(ctx, &trainings, query)
-	if err != nil {
-		return nil, err
-	}
+    // Gunakan query dengan LIMIT dan OFFSET
+    // Urutkan berdasarkan date_start ASC agar urutan jadwal konsisten di tiap page
+    query := `SELECT id, title, description, date_start, price, created_at 
+              FROM trainings 
+              ORDER BY date_start ASC 
+              LIMIT $1 OFFSET $2`
 
-	jsonData, _ := json.Marshal(trainings)
-	_ = r.redis.Set(ctx, cacheKey, jsonData, 1*time.Hour)
+    err = r.db.SelectContext(ctx, &trainings, query, limit, offset)
+    if err != nil {
+        return nil, err
+    }
 
-	return trainings, nil
+    jsonData, _ := json.Marshal(trainings)
+    _ = r.redis.Set(ctx, cacheKey, jsonData, 1*time.Hour)
+
+    return trainings, nil
 }
 
 func (r *TrainingRepository) GetByID(ctx context.Context, id string) (*model.Training, error) {

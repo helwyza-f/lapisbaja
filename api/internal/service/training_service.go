@@ -51,10 +51,14 @@ func (s *TrainingService) CreateTraining(ctx context.Context, req model.CreateTr
 	return training, err
 }
 
-func (s *TrainingService) ListTrainings(ctx context.Context) ([]model.Training, error) {
-	return s.repo.GetAll(ctx)
+// internal/service/training_service.go
+func (s *TrainingService) ListTrainings(ctx context.Context, limit, offset int) ([]model.Training, error) {
+    // Kamu bisa tambahkan logic default value di sini jika perlu
+    if limit <= 0 {
+        limit = 10 // Default 10 data per page
+    }
+    return s.repo.GetAll(ctx, limit, offset)
 }
-
 func (s *TrainingService) GetTrainingByID(ctx context.Context, id string) (*model.Training, error) {
 	return s.repo.GetByID(ctx, id)
 }

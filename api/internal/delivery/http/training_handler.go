@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/helwiza/lapisbaja-api/internal/model"
 	"github.com/helwiza/lapisbaja-api/internal/service"
@@ -36,13 +37,30 @@ func (h *TrainingHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // List mengambil semua data training (Cache-enabled via Repo)
 func (h *TrainingHandler) List(w http.ResponseWriter, r *http.Request) {
-	trainings, err := h.svc.ListTrainings(r.Context())
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal mengambil data", err.Error())
-		return
-	}
+    // 1. Ambil & Validasi Query Param
+    query := r.URL.Query()
+    
+    limit, _ := strconv.Atoi(query.Get("limit"))
+    page, _ := strconv.Atoi(query.Get("page"))
 
-	utils.SuccessResponse(w, http.StatusOK, "Berhasil mengambil daftar training", trainings)
+    // Logic default pagination
+    if limit <= 0 { limit = 9 } // Rekomendasi 9 (grid 3x3)
+    if page <= 0 { page = 1 }
+    
+    // Hitung offset: (page - 1) * limit
+    // Contoh: Page 1 -> (1-1)*9 = 0. Page 2 -> (2-1)*9 = 9.
+    offset := (page - 1) * limit
+
+    // 2. Panggil service
+    trainings, err := h.svc.ListTrainings(r.Context(), limit, offset)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal mengambil data", err.Error())
+        return
+    }
+
+    // 3. Response
+    // Tips: Kedepannya kamu bisa sertai metadata "total_data" untuk membantu frontend bikin UI numbering
+    utils.SuccessResponse(w, http.StatusOK, "Berhasil mengambil daftar training", trainings)
 }
 
 // GetByID mengambil detail satu training berdasarkan UUID di URL

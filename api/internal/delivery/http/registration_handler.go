@@ -141,3 +141,61 @@ func (h *RegistrationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	utils.SuccessResponse(w, http.StatusOK, "Pendaftaran berhasil dihapus", nil)
 }
+
+func (h *RegistrationHandler) CheckStatus(w http.ResponseWriter, r *http.Request) {
+    identifier := r.URL.Query().Get("identifier")
+    if identifier == "" {
+        utils.ErrorResponse(w, http.StatusBadRequest, "Identifier (Email/Phone) diperlukan", "")
+        return
+    }
+
+    // Panggil service untuk cari data pendaftaran terakhir
+    result, err := h.svc.GetLatestStatus(r.Context(), identifier)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusNotFound, "Data pendaftaran tidak ditemukan", err.Error())
+        return
+    }
+
+    utils.SuccessResponse(w, http.StatusOK, "Status ditemukan", result)
+}
+// internal/delivery/http/registration_handler.go
+
+// UploadProof menangani pendaftar yang mengunggah ulang bukti bayar (Public)
+func (h *RegistrationHandler) UploadProof(w http.ResponseWriter, r *http.Request) {
+    // 1. Ambil ID pendaftaran dari URL path
+    id := r.PathValue("id")
+    if id == "" {
+        utils.ErrorResponse(w, http.StatusBadRequest, "ID pendaftaran diperlukan", "")
+        return
+    }
+
+    // 2. Parse Multipart Form (Maksimal 5MB)
+    if err := r.ParseMultipartForm(5 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "File terlalu besar atau form tidak valid", err.Error())
+        return
+    }
+
+    // 3. Ambil file "proof" dari form
+    file, _, err := r.FormFile("proof")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "Bukti bayar tidak ditemukan dalam request", err.Error())
+        return
+    }
+    defer file.Close()
+
+    // 4. Baca konten file
+    fileBody, err := io.ReadAll(file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal membaca file", err.Error())
+        return
+    }
+
+    // 5. Panggil service untuk proses re-upload (Logic: ganti file R2 & set status PENDING)
+    err = h.svc.ReuploadProof(r.Context(), id, fileBody)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal memproses unggah ulang", err.Error())
+        return
+    }
+
+    utils.SuccessResponse(w, http.StatusOK, "Bukti bayar berhasil diperbarui, menunggu verifikasi admin", nil)
+}

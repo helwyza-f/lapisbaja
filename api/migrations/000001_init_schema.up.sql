@@ -1,8 +1,8 @@
 -- ==========================================================
--- PT LAPIS BAJA - SEAMLESS INITIALIZATION & SEED
+-- PT LAPIS BAJA - SEAMLESS INITIALIZATION & SEED (V2 - UPDATED)
 -- ==========================================================
 
--- 1. CLEANUP (Hapus semua tabel lama jika ada agar ID & data reset total)
+-- 1. CLEANUP
 DROP TABLE IF EXISTS registrations CASCADE;
 DROP TABLE IF EXISTS trainings CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
@@ -18,7 +18,8 @@ CREATE TABLE users (
     password TEXT NOT NULL,
     full_name VARCHAR(255),
     role VARCHAR(20) DEFAULT 'ADMIN',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 4. TABEL TRAININGS (Program Pelatihan)
@@ -28,7 +29,8 @@ CREATE TABLE trainings (
     description TEXT,
     date_start DATE NOT NULL,
     price DECIMAL(15, 2) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 5. TABEL STUDENTS (Master Data Peserta)
@@ -38,7 +40,8 @@ CREATE TABLE students (
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(20) NOT NULL,
     agency VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 6. TABEL REGISTRATIONS (Transaksi Pendaftaran)
@@ -48,29 +51,39 @@ CREATE TABLE registrations (
     training_id UUID NOT NULL REFERENCES trainings(id) ON DELETE CASCADE,
     proof_url TEXT,
     status VARCHAR(50) DEFAULT 'PENDING',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- FIX: Kolom ini sekarang ada!
 );
 
--- 7. OPTIMASI INDEX (Cepat tarik 10k data)
+-- 7. OPTIMASI INDEX
 CREATE INDEX idx_registrations_status ON registrations(status);
 CREATE INDEX idx_registrations_training ON registrations(training_id);
 CREATE INDEX idx_students_email ON students(email);
+CREATE INDEX idx_students_phone ON students(phone); -- Tambahan: buat pendaftar cek status lewat WA
 
--- 8. SEAMLESS SEEDING (Data Dasar)
--- Password Admin (admin123) dipotong 60 char biar aman di Windows
+-- 8. SEAMLESS SEEDING
+-- Default admin user (admin / admin123)
+-- Password di-handle oleh ensureAdminUser di main.go, tapi kita kasih dummy valid awal
 INSERT INTO users (username, password, full_name, role) 
 VALUES (
     'admin', 
-    LEFT('$2a$10$86p0hYVf0uP5.PzM/h6vxeH1vI0.yK1vI0.yK1vI0.yK1vI0.yK1vI0.yK1v', 60), 
+    '$2a$10$86p0hYVf0uP5.PzM/h6vxeH1vI0.yK1vI0.yK1vI0.yK1vI0.yK1vI0.yK1v', 
     'Admin Lapis Baja', 
     'ADMIN'
 );
 
--- Tambah 1 data pelatihan awal agar Dashboard tidak kosong saat pertama run
+-- Seed Data Pelatihan Awal
 INSERT INTO trainings (title, description, date_start, price)
-VALUES (
+VALUES 
+(
     'Pelatihan Sertifikasi Baja Level 1',
-    'Initial batch untuk testing sistem.',
+    'Program intensif inspeksi baja standar internasional.',
     CURRENT_DATE + INTERVAL '1 month',
-    1000000
+    1500000
+),
+(
+    'Coating Inspector Level 2',
+    'Advanced certification for professional coating inspectors.',
+    CURRENT_DATE + INTERVAL '2 month',
+    2500000
 );

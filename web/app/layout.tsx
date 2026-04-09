@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CMS Lapis Baja | Admin Panel",
-  description: "Sistem Manajemen Sertifikasi PT Lapis Baja Inspektindo",
+  title: "PT Lapis Baja Inspektindo | Coating & Welding Inspection Training",
+  description:
+    "Pusat pelatihan dan sertifikasi inspeksi teknis terkemuka di Batam. Spesialis Blasting, Painting, dan Welding Inspection.",
   icons: {
     icon: "/favicon.ico",
   },
@@ -29,19 +30,10 @@ export default function RootLayout({
   return (
     <html lang="id" className="h-full scroll-smooth">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full bg-slate-50 text-slate-900`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full bg-white text-slate-900`}
       >
-        {/* Main Content Render */}
         {children}
-
-        {/* Global Notification System */}
-        <Toaster
-          richColors
-          position="top-right"
-          closeButton
-          expand={false}
-          theme="light"
-        />
+        <Toaster richColors position="top-center" closeButton theme="light" />
       </body>
     </html>
   );

@@ -1,3 +1,4 @@
+// File: web/lib/types.ts
 export interface Registration {
   id: string;
   student_id: string;
@@ -22,4 +23,15 @@ export interface PaginationMeta {
 export interface PagedResponse<T> {
   items: T[];
   meta: PaginationMeta;
+}
+
+// Tambahkan ini di web/lib/types.ts
+export interface Training {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  date_start: string;
+  price: number;
+  created_at: string;
 }
