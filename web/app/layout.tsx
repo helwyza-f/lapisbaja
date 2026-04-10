@@ -13,32 +13,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Metadata dengan Title & Description PT Lapis Baja
 export const metadata: Metadata = {
   title: "PT Lapis Baja Inspektindo | Coating & Welding Inspection Training",
   description:
     "Pusat pelatihan dan sertifikasi inspeksi teknis terkemuka di Batam. Spesialis Blasting, Painting, dan Welding Inspection.",
-  // --- UPDATE ICON & MANIFEST ---
+  // Kita biarkan Next.js mendeteksi favicon.ico, apple-touch-icon.png,
+  // dan manifest secara otomatis dari folder app.
+  // Tapi kita tambahkan fallback manual agar lebih "bulletproof"
   icons: {
-    icon: [
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon.ico" },
-    ],
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-    ],
-    other: [
-      {
-        rel: "android-chrome",
-        url: "/android-chrome-192x192.png",
-        sizes: "192x192",
-      },
-      {
-        rel: "android-chrome",
-        url: "/android-chrome-512x512.png",
-        sizes: "512x512",
-      },
-    ],
+    icon: "/favicon.ico",
+    shortcut: "/favicon-96x96.png",
+    apple: "/apple-touch-icon.png",
   },
   manifest: "/site.webmanifest",
 };
