@@ -17,9 +17,30 @@ export const metadata: Metadata = {
   title: "PT Lapis Baja Inspektindo | Coating & Welding Inspection Training",
   description:
     "Pusat pelatihan dan sertifikasi inspeksi teknis terkemuka di Batam. Spesialis Blasting, Painting, dan Welding Inspection.",
+  // --- UPDATE ICON & MANIFEST ---
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    other: [
+      {
+        rel: "android-chrome",
+        url: "/android-chrome-192x192.png",
+        sizes: "192x192",
+      },
+      {
+        rel: "android-chrome",
+        url: "/android-chrome-512x512.png",
+        sizes: "512x512",
+      },
+    ],
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
