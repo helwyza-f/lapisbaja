@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/helwiza/lapisbaja-api/internal/model"
 	"github.com/helwiza/lapisbaja-api/internal/service"
@@ -19,32 +20,28 @@ func NewRegistrationHandler(svc *service.RegistrationService) *RegistrationHandl
 	return &RegistrationHandler{svc: svc}
 }
 
-// Register menangani pendaftaran dari sisi pendaftar (Public)
+// Register: Public pendaftaran
 func (h *RegistrationHandler) Register(w http.ResponseWriter, r *http.Request) {
-	// 1. Batasi ukuran file (5MB) agar Mac Mini tidak keberatan proses buffer
 	if err := r.ParseMultipartForm(5 << 20); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "File terlalu besar atau form tidak valid", err.Error())
 		return
 	}
 
 	var fileBody []byte
-	// 2. Ambil file bukti bayar (Opsional)
 	file, _, err := r.FormFile("proof")
 	if err == nil {
 		defer file.Close()
 		fileBody, _ = io.ReadAll(file)
 	}
 
-	// 3. Mapping data dari multipart form
 	reg := model.Registration{
 		TrainingID: r.FormValue("training_id"),
 		Name:       r.FormValue("name"),
-		Email:      r.FormValue("email"),
-		Phone:      r.FormValue("phone"),
+		Email:      strings.TrimSpace(r.FormValue("email")),
+		Phone:      strings.TrimSpace(r.FormValue("phone")),
 		Agency:     r.FormValue("agency"),
 	}
 
-	// 4. Panggil Service
 	result, err := h.svc.RegisterStudent(r.Context(), reg, fileBody)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal melakukan pendaftaran", err.Error())
@@ -54,9 +51,30 @@ func (h *RegistrationHandler) Register(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, http.StatusCreated, "Pendaftaran berhasil dikirim", result)
 }
 
-// List mengambil data pendaftar dengan dukungan Pagination, Search, & Multi-Filter (Sisi Admin)
+// CheckStatus: Public status check (FIXED WITH SANITIZATION)
+func (h *RegistrationHandler) CheckStatus(w http.ResponseWriter, r *http.Request) {
+	identifier := r.URL.Query().Get("identifier")
+	
+	// SAKTI: Hapus %20 atau spasi hantu yang bikin SQL zonk
+	identifier = strings.TrimSpace(identifier)
+
+	if identifier == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Identifier (Email/Phone) diperlukan", "")
+		return
+	}
+
+	result, err := h.svc.GetLatestStatus(r.Context(), identifier)
+	if err != nil {
+		// Jika tidak ketemu, kita kasih 404 tapi message-nya user friendly
+		utils.ErrorResponse(w, http.StatusNotFound, "Data pendaftaran tidak ditemukan. Pastikan Email/Nomor WA sudah benar.", err.Error())
+		return
+	}
+
+	utils.SuccessResponse(w, http.StatusOK, "Status ditemukan", result)
+}
+
+// List: Admin pendaftaran list
 func (h *RegistrationHandler) List(w http.ResponseWriter, r *http.Request) {
-	// 1. Extract Query Parameters
 	query := r.URL.Query()
 	
 	page, _ := strconv.Atoi(query.Get("page"))
@@ -65,15 +83,11 @@ func (h *RegistrationHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(query.Get("limit"))
 	if limit <= 0 { limit = 10 }
 
-	// INDUSTRIAL FILTER SYNC:
-	// Kita ambil semua param yang mungkin dikirim dari Frontend RSC
 	search := query.Get("search")
 	status := query.Get("status")
 	trainingID := query.Get("training_id")
 	date := query.Get("date")
 
-	// 2. Panggil Service dengan parameter yang lebih kaya
-	// Pastikan service.ListRegistrations kamu di-update untuk menerima search, status, dll.
 	results, err := h.svc.ListRegistrations(r.Context(), page, limit, search, status, trainingID, date)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Gagal sinkronisasi daftar pendaftaran", err.Error())
@@ -83,7 +97,7 @@ func (h *RegistrationHandler) List(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, http.StatusOK, "SYSTEM: Registry data synchronized successfully", results)
 }
 
-// GetByID mengambil detail satu pendaftaran
+// GetByID: Admin detail
 func (h *RegistrationHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -100,7 +114,7 @@ func (h *RegistrationHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, http.StatusOK, "Berhasil mengambil detail pendaftaran", result)
 }
 
-// UpdateStatus mengubah status pendaftaran (APPROVED, REJECTED)
+// UpdateStatus: Admin action
 func (h *RegistrationHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -125,7 +139,7 @@ func (h *RegistrationHandler) UpdateStatus(w http.ResponseWriter, r *http.Reques
 	utils.SuccessResponse(w, http.StatusOK, "Status pendaftaran berhasil diperbarui", nil)
 }
 
-// Delete menghapus data pendaftaran
+// Delete: Admin delete
 func (h *RegistrationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -142,24 +156,7 @@ func (h *RegistrationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, http.StatusOK, "Pendaftaran berhasil dihapus", nil)
 }
 
-// CheckStatus mencari pendaftaran terakhir berdasarkan email/phone (Public)
-func (h *RegistrationHandler) CheckStatus(w http.ResponseWriter, r *http.Request) {
-	identifier := r.URL.Query().Get("identifier")
-	if identifier == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Identifier (Email/Phone) diperlukan", "")
-		return
-	}
-
-	result, err := h.svc.GetLatestStatus(r.Context(), identifier)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusNotFound, "Data pendaftaran tidak ditemukan", err.Error())
-		return
-	}
-
-	utils.SuccessResponse(w, http.StatusOK, "Status ditemukan", result)
-}
-
-// UploadProof menangani pendaftar yang mengunggah ulang bukti bayar (Public)
+// UploadProof: Public re-upload
 func (h *RegistrationHandler) UploadProof(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {

@@ -1,4 +1,3 @@
-// internal/service/registration_service.go
 package service
 
 import (
@@ -36,7 +35,11 @@ func NewRegistrationService(
 
 // RegisterStudent: Menangani pendaftaran awal dari sisi publik
 func (s *RegistrationService) RegisterStudent(ctx context.Context, reg model.Registration, fileBody []byte) (*model.Registration, error) {
-	// 1. Validasi Nomor WA via Fonnte
+	// 1. Sanitasi Input (Trim spasi hantu)
+	reg.Phone = strings.TrimSpace(reg.Phone)
+	reg.Email = strings.TrimSpace(reg.Email)
+
+	// 2. Validasi Nomor WA via Fonnte
 	isValid, err := s.wa.ValidateNumber(reg.Phone)
 	if err != nil || !isValid {
 		return nil, fmt.Errorf("nomor WhatsApp tidak valid atau tidak terdaftar")
@@ -46,7 +49,7 @@ func (s *RegistrationService) RegisterStudent(ctx context.Context, reg model.Reg
 		return nil, fmt.Errorf("ID Pelatihan tidak boleh kosong")
 	}
 
-	// 2. Handling Upload Bukti Bayar
+	// 3. Handling Upload Bukti Bayar
 	if len(fileBody) > 0 {
 		safeName := strings.ReplaceAll(reg.Name, " ", "-")
 		fileName := fmt.Sprintf("proofs/%s/%d-%s.jpg",
@@ -61,34 +64,32 @@ func (s *RegistrationService) RegisterStudent(ctx context.Context, reg model.Reg
 		reg.ProofURL = proofURL
 	}
 
-	// 3. Simpan ke Database
+	// 4. Simpan ke Database
 	err = s.repo.CreateRegistration(ctx, &reg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save registration: %w", err)
 	}
 
-	// 4. Notifikasi Async
+	// 5. Notifikasi Async
 	go s.notifyNewRegistration(reg)
 
-	// 5. Alert Dashboard via Redis
+	// 6. Alert Dashboard via Redis
 	_ = s.redis.Set(ctx, "new_registration_alert", "true", 24*time.Hour)
 
 	return &reg, nil
 }
 
-// ListRegistrations: FIXED - Sekarang mendukung pencarian, status, training_id, dan date filter
+// ListRegistrations: Mendukung pencarian, status, training_id, dan date filter
 func (s *RegistrationService) ListRegistrations(ctx context.Context, page, limit int, search, status, trainingID, date string) (*model.RegistrationPagedResponse, error) {
 	if limit <= 0 { limit = 10 }
 	if page <= 0 { page = 1 }
 
-	// Normalisasi status ke Uppercase agar match dengan DB
 	if status != "" && status != "ALL" {
 		status = strings.ToUpper(status)
 	} else {
-		status = "" // Kosongkan jika ALL agar repository tidak filter status
+		status = ""
 	}
 
-	// Teruskan ke repository untuk eksekusi SQL
 	return s.repo.GetAll(ctx, page, limit, search, status, trainingID, date)
 }
 
@@ -111,8 +112,8 @@ func (s *RegistrationService) UpdateRegistrationStatus(ctx context.Context, id s
 		return err
 	}
 
-	// Kirim Notifikasi Perubahan Status
-	go s.notifyStatusChange(reg.Phone, reg.Name, statusUpper)
+	// FIX: Kirim data lengkap ke notifier untuk sinkronisasi link identifier
+	go s.notifyStatusChange(reg, statusUpper)
 
 	return nil
 }
@@ -135,13 +136,11 @@ func (s *RegistrationService) ReuploadProof(ctx context.Context, id string, file
 		return fmt.Errorf("failed to upload new proof: %w", err)
 	}
 
-	// Update DB: Status balik ke PENDING
 	err = s.repo.UpdateProofAndStatus(ctx, id, proofURL, "PENDING")
 	if err != nil {
 		return fmt.Errorf("failed to update db: %w", err)
 	}
 
-	// Notify Admin Async
 	go func() {
 		adminWA := os.Getenv("ADMIN_WA_NUMBER")
 		msg := fmt.Sprintf("🔄 *RE-UPLOAD BUKTI*\n\nNama: %s\nID: %s\n\nPendaftar telah mengunggah ulang bukti bayar. Mohon segera dicek.", reg.Name, id)
@@ -153,7 +152,10 @@ func (s *RegistrationService) ReuploadProof(ctx context.Context, id string, file
 
 // GetLatestStatus: Cek status pendaftaran terakhir oleh user publik
 func (s *RegistrationService) GetLatestStatus(ctx context.Context, identifier string) (map[string]interface{}, error) {
-	reg, trainingTitle, err := s.repo.FindByContact(ctx, identifier)
+	// FIX: Bersihkan identifier dari spasi hantu sebelum query
+	cleanIdentifier := strings.TrimSpace(identifier)
+	
+	reg, trainingTitle, err := s.repo.FindByContact(ctx, cleanIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -168,23 +170,23 @@ func (s *RegistrationService) GetLatestStatus(ctx context.Context, identifier st
 	}, nil
 }
 
-// GetRegistrationByID: Fetch detail pendaftaran tunggal
 func (s *RegistrationService) GetRegistrationByID(ctx context.Context, id string) (*model.Registration, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-// DeleteRegistration: Hapus record pendaftaran
 func (s *RegistrationService) DeleteRegistration(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-// --- HELPER NOTIFIKASI ---
+// --- HELPER NOTIFIKASI (FIXED LINKS) ---
 
 func (s *RegistrationService) notifyNewRegistration(reg model.Registration) {
 	frontendURL := os.Getenv("FRONTEND_URL")
 	adminWA := os.Getenv("ADMIN_WA_NUMBER")
 
-	statusLink := fmt.Sprintf("%s/trainings/status?identifier=%s", frontendURL, reg.Email)
+	// SINKRONISASI: Gunakan Email sebagai identifier utama di link
+	cleanEmail := strings.TrimSpace(reg.Email)
+	statusLink := fmt.Sprintf("%s/trainings/status?identifier=%s", frontendURL, cleanEmail)
 
 	customerMsg := fmt.Sprintf(
 		"Halo *%s*,\n\nTerima kasih telah mendaftar di PT Lapis Baja Inspektindo.\n\nSilakan lakukan pembayaran dan unggah bukti bayar melalui tautan berikut:\n\n🔗 %s\n\nAdmin kami akan memverifikasi dalam 1x24 jam.",
@@ -199,25 +201,28 @@ func (s *RegistrationService) notifyNewRegistration(reg model.Registration) {
 	_ = s.wa.SendMessage(adminWA, adminMsg)
 }
 
-func (s *RegistrationService) notifyStatusChange(phone, name, status string) {
+func (s *RegistrationService) notifyStatusChange(reg *model.Registration, status string) {
 	frontendURL := os.Getenv("FRONTEND_URL")
-	statusLink := fmt.Sprintf("%s/trainings/status?identifier=%s", frontendURL, phone)
+	
+	// SINKRONISASI: Gunakan Email agar konsisten dengan notifikasi pendaftaran awal
+	cleanEmail := strings.TrimSpace(reg.Email)
+	statusLink := fmt.Sprintf("%s/trainings/status?identifier=%s", frontendURL, cleanEmail)
 	
 	var msg string
 	switch status {
 	case "APPROVED":
 		msg = fmt.Sprintf(
 			"Selamat *%s*!\n\nPendaftaran Anda telah *DISETUJUI*.\n\nDetail:\n🔗 %s", 
-			name, statusLink,
+			reg.Name, statusLink,
 		)
 	case "REJECTED":
 		msg = fmt.Sprintf(
 			"Halo *%s*,\n\nMohon maaf, bukti pembayaran Anda belum valid.\n\nUnggah ulang di sini:\n🔗 %s", 
-			name, statusLink,
+			reg.Name, statusLink,
 		)
 	}
 
 	if msg != "" {
-		_ = s.wa.SendMessage(phone, msg)
+		_ = s.wa.SendMessage(reg.Phone, msg)
 	}
 }
