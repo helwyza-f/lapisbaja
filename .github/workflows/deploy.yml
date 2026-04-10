@@ -1,0 +1,90 @@
+# Deploy Lapisbaja to IDCloudHost
+name: Deploy Lapisbaja to IDCloudHost
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --- 1. GENERATE .ENV DARI SECRETS ---
+      - name: Create Environment Files
+        run: |
+          # Inject secrets ke file .env masing-masing folder
+          echo "${{ secrets.LAPISBAJA_API_ENV }}" > api/.env
+          echo "${{ secrets.LAPISBAJA_WEB_ENV }}" > web/.env
+
+      # --- 2. BUILD BACKEND (GO) ---
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Build Backend Binary
+        run: |
+          cd api
+          # Build static binary untuk Linux AMD64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main cmd/server/main.go
+
+      # --- 3. BUILD FRONTEND (NEXT.JS) ---
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "web/package-lock.json"
+      - name: Build Frontend Standalone
+        env:
+          # Build-time env untuk Next.js
+          NEXT_PUBLIC_API_URL: https://lapisbaja.bookinaja.com/api
+        run: |
+          cd web
+          npm install
+          npm run build
+
+      # --- 4. PRE-CLEAN VPS (Hapus sisa deploy lama) ---
+      - name: Reset Environment on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            mkdir -p ~/lapisbaja/api ~/lapisbaja/web
+            rm -f ~/lapisbaja/api/main
+            rm -f ~/lapisbaja/api/.env
+            rm -f ~/lapisbaja/web/.env
+            rm -rf ~/lapisbaja/web/.next
+
+      # --- 5. TRANSFER FILE MATENG KE VPS (SCP) ---
+      - name: Transfer Files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Kita hanya kirim yang perlu saja
+          source: "api/main,api/migrations,api/Dockerfile,api/.env,web/.next/standalone,web/.next/static,web/public,web/Dockerfile,web/.env,docker-compose.yml"
+          target: "~/lapisbaja"
+          strip_components: 0
+          overwrite: true
+
+      # --- 6. RESTART DOCKER DI VPS ---
+      - name: Execute Docker Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/lapisbaja
+            # Down dlu supaya container bersih
+            sudo docker compose down
+            # Build ulang image lokal dari file yang baru dikirim
+            sudo docker compose up --build -d
+            # Bersihkan image lama yang sudah tidak terpakai (dangling)
+            sudo docker image prune -f

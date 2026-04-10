@@ -1,25 +1,50 @@
 services:
-  # Database PostgreSQL
   db:
-    image: postgres:16-alpine
-    container_name: lapisbaja_db
+    image: postgres:15-alpine
+    container_name: lapisbaja-db
     restart: always
     environment:
       POSTGRES_USER: devuser
       POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: lapisbaja_db
-    ports:
-      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/db:/var/lib/postgresql/data
+    networks:
+      - lapisbaja-net
 
-  # Redis untuk caching
-  cache:
-    image: redis:7-alpine
-    container_name: lapisbaja_redis
+  redis:
+    image: redis:alpine
+    container_name: lapisbaja-redis
     restart: always
-    ports:
-      - "6379:6379"
+    networks:
+      - lapisbaja-net
 
-volumes:
-  postgres_data:
+  api:
+    build: ./api
+    container_name: lapisbaja-api
+    restart: always
+    depends_on:
+      - db
+      - redis
+    # Menggunakan port agar bisa diakses Nginx VPS
+    ports:
+      - "8080:8080"
+    env_file: ./api/.env
+    networks:
+      - lapisbaja-net
+
+  web:
+    build: ./web
+    container_name: lapisbaja-web
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    env_file: ./web/.env
+    networks:
+      - lapisbaja-net
+
+networks:
+  lapisbaja-net:
+    driver: bridge
