@@ -1,13 +1,16 @@
 // app/(admin)/dashboard/registrations/page.tsx
 import RegistrationsTable from "@/components/admin/RegistrationsTable";
 import { ListFilter } from "lucide-react";
+import { Suspense } from "react"; // Tambahkan ini
+
+// Pastikan halaman ini selalu dinamis
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   searchParams: { [key: string]: string | string[] | undefined };
 }
 
 export default function RegistrationsPage({ searchParams }: PageProps) {
-  // Ambil initial filter dari URL (jika ada)
   const initialFilters = {
     training_id:
       typeof searchParams.training_id === "string"
@@ -39,8 +42,18 @@ export default function RegistrationsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* Kirim initialFilters ke Client Component */}
-      <RegistrationsTable initialFilters={initialFilters} />
+      {/* WAJIB: Bungkus Client Component yang pakai useSearchParams dengan Suspense */}
+      <Suspense
+        fallback={
+          <div className="w-full h-96 bg-white border border-slate-100 rounded-xl animate-pulse flex items-center justify-center">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+              Synchronizing Node...
+            </p>
+          </div>
+        }
+      >
+        <RegistrationsTable initialFilters={initialFilters} />
+      </Suspense>
     </div>
   );
 }

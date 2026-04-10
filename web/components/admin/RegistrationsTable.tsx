@@ -1,4 +1,3 @@
-// components/admin/RegistrationsTable.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -45,7 +44,7 @@ export default function RegistrationsTable({
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Sync state dengan initial filters dari RSC
+  // Sync state dengan initial filters dari Server Component
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(
     initialFilters?.status || "ALL",
@@ -70,7 +69,7 @@ export default function RegistrationsTable({
 
         if (searchTerm) query += `&search=${searchTerm}`;
         if (statusFilter !== "ALL") query += `&status=${statusFilter}`;
-        if (trainingId) query += `&training_id=${trainingId}`; // Pass training filter
+        if (trainingId) query += `&training_id=${trainingId}`;
         if (date) query += `&date=${format(date, "yyyy-MM-dd")}`;
 
         const res = await api.get(query);
@@ -94,6 +93,7 @@ export default function RegistrationsTable({
     [searchTerm, statusFilter, date, trainingId],
   );
 
+  // Debounce search agar tidak spam API
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => fetchRegistrations(1), 500);
     return () => clearTimeout(delayDebounceFn);
@@ -104,7 +104,7 @@ export default function RegistrationsTable({
     setStatusFilter("ALL");
     setTrainingId("");
     setDate(undefined);
-    router.push("/dashboard/registrations"); // Clean URL
+    router.push("/dashboard/registrations");
   };
 
   const renderPageNumbers = () => {
@@ -137,7 +137,6 @@ export default function RegistrationsTable({
     <div className="bg-white border border-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.03)] overflow-hidden rounded-xl">
       {/* FILTER BAR */}
       <div className="p-6 border-b border-slate-100 bg-slate-50/40 flex flex-wrap lg:flex-nowrap gap-5 items-center">
-        {/* Active Training Indicator (New!) */}
         {trainingId && (
           <div className="flex items-center gap-3 px-4 h-12 bg-primary/10 border border-primary/20 rounded-lg animate-in slide-in-from-left-2">
             <p className="text-[10px] font-black text-primary uppercase tracking-widest leading-none">
@@ -233,7 +232,7 @@ export default function RegistrationsTable({
         </Button>
       </div>
 
-      {/* TABLE SECTION (Tetap Bold & Professional) */}
+      {/* TABLE SECTION */}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
@@ -330,9 +329,9 @@ export default function RegistrationsTable({
         </table>
       </div>
 
-      {/* ENHANCED PAGINATION */}
+      {/* PAGINATION */}
       <div className="p-8 bg-white border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-8">
-        <div className="space-y-2">
+        <div className="space-y-2 text-center sm:text-left">
           <p className="text-[12px] font-black text-slate-900 uppercase tracking-[0.3em] leading-none">
             PAGE{" "}
             <span className="text-primary underline decoration-2 underline-offset-4">
@@ -353,7 +352,7 @@ export default function RegistrationsTable({
           >
             <ChevronLeft size={24} strokeWidth={3} />
           </button>
-          <div className="flex gap-6">{renderPageNumbers()}</div>
+          <div className="flex gap-4 md:gap-6">{renderPageNumbers()}</div>
           <button
             disabled={meta.current_page === meta.total_page}
             onClick={() => fetchRegistrations(meta.current_page + 1)}
