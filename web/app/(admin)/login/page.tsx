@@ -1,6 +1,7 @@
 // app/(admin)/login/page.tsx
 import LoginForm from "@/components/admin/LoginForm";
 import { ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 export default function LoginPage() {
   return (
@@ -29,6 +30,12 @@ export default function LoginPage() {
 
         {/* System Footer (RSC) */}
         <div className="pt-8 text-center border-t border-slate-100">
+          <Link
+            href="/"
+            className="text-[9px] font-bold text-slate-300 uppercase tracking-widest"
+          >
+            Back to Home
+          </Link>
           <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
             Control Panel v2.1 • Secured Connection
           </p>
